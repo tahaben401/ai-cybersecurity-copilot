@@ -7,7 +7,7 @@
 </p>
 
 <h1 align="center">
-  🔱 MANTIS
+   MANTIS
 </h1>
 
 <h3 align="center">
