@@ -1,5 +1,7 @@
 package com.example.aicybersecuritycopilot.user.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import lombok.*;
 import org.springframework.security.core.GrantedAuthority;
@@ -18,6 +20,9 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@JsonIgnoreProperties({"password", "role", "authorities", "accountNonExpired",
+        "accountNonLocked", "credentialsNonExpired", "enabled",
+        "hibernateLazyInitializer", "username"})
 public class User implements UserDetails {
 
     @Id
@@ -28,6 +33,7 @@ public class User implements UserDetails {
     private String email;
 
     @Column(nullable = false)
+    @JsonIgnore
     private String password;
 
     @Enumerated(EnumType.STRING)

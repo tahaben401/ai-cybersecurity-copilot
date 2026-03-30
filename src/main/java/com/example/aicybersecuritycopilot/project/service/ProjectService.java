@@ -9,8 +9,10 @@ import com.example.aicybersecuritycopilot.user.repository.UserRepository;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.parameters.P;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -22,7 +24,6 @@ public class ProjectService {
     private final ProjectMapper projectMapper;
     public Project createProject(CreateProjectRequest createProjectRequest) {
         String email =(String) SecurityContextHolder.getContext().getAuthentication().getName();
-        System.out.println("email: "+email);
         Project project= projectMapper.toProject(createProjectRequest);
         User user = userRepository.findByEmailIgnoreCase(email).orElseThrow(EntityNotFoundException::new);
         project.setUser(user);
@@ -30,6 +31,9 @@ public class ProjectService {
     }
     public Project findProjectById(UUID id) {
         return projectRepository.findById(id).get();
+    }
+    public List<Project> findUserProjects(UUID id) {
+        return projectRepository.findByUserId(id);
     }
     public void deleteProjectById(UUID id) {
         projectRepository.deleteById(id);

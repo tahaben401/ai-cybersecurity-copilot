@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -28,5 +29,10 @@ public class ProjectController {
     public ResponseEntity<Object> deleteProject(@PathVariable UUID id) {
         projectService.deleteProjectById(id);
         return ResponseEntity.noContent().build();
+    }
+    @GetMapping("/user/{userId}")
+    public ResponseEntity<List<Project>> getProjectsByUser(@PathVariable UUID userId) {
+        List<Project> projects = projectService.findUserProjects(userId);
+        return ResponseEntity.ok(projects);
     }
 }
