@@ -405,7 +405,7 @@ MANTIS practices **security-by-design** at every layer:
   <tr>
     <td align="center">
       <strong>Ismail Allouch</strong><br/>
-      Software Engineer
+      Software & AI Engineer
     </td>
     <td align="center">
       <strong>Taha Ben Ahmadi</strong><br/>
