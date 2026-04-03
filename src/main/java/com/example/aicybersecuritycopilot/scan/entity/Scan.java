@@ -1,6 +1,6 @@
 package com.example.aicybersecuritycopilot.scan.entity;
 
-import com.example.aicybersecuritycopilot.project.entity.Project;
+import com.example.aicybersecuritycopilot.project.model.Project;
 import jakarta.persistence.*;
 import lombok.*;
 

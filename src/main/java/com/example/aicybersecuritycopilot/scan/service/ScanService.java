@@ -1,6 +1,6 @@
 package com.example.aicybersecuritycopilot.scan.service;
 
-import com.example.aicybersecuritycopilot.project.entity.Project;
+import com.example.aicybersecuritycopilot.project.model.Project;
 import com.example.aicybersecuritycopilot.project.repository.ProjectRepository;
 import com.example.aicybersecuritycopilot.scan.entity.Scan;
 import com.example.aicybersecuritycopilot.scan.entity.ScanStatus;
@@ -35,8 +35,8 @@ public class ScanService {
         Project project = projectRepository.findById(projectId)
                 .orElseThrow(() -> new IllegalArgumentException("Project not found: " + projectId));
 
-        if (!repoValidator.isValidGithubUrl(project.getGithubUrl())) {
-            throw new IllegalArgumentException("Invalid Github URL for project: " + project.getGithubUrl());
+        if (!repoValidator.isValidGithubUrl(project.getRepoUrl())) {
+            throw new IllegalArgumentException("Invalid Github URL for project: " + project.getRepoUrl());
         }
 
         Scan scan = Scan.builder()
@@ -48,7 +48,7 @@ public class ScanService {
         scan = scanRepository.save(scan);
         
         // Launch async process in a background thread
-        performAsyncScan(scan.getId(), project.getGithubUrl());
+        performAsyncScan(scan.getId(), project.getRepoUrl());
         
         return scan;
     }
