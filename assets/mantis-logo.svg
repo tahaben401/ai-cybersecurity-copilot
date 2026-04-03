@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 160" width="100%" height="160">
+  <defs>
+    <!-- Cyberpunk Gradient -->
+    <linearGradient id="cyberGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00E5FF" />
+      <stop offset="50%" stop-color="#3B82F6" />
+      <stop offset="100%" stop-color="#8B5CF6" />
+    </linearGradient>
+
+    <!-- Glitch Clip Paths for slicing the text -->
+    <clipPath id="glitch-clip-1">
+      <rect x="0" y="30" width="800" height="20" />
+    </clipPath>
+    <clipPath id="glitch-clip-2">
+      <rect x="0" y="80" width="800" height="25" />
+    </clipPath>
+  </defs>
+
+  <style>
+    /* Background */
+    .bg { fill: transparent; }
+    
+    /* Base Font Styling */
+    .text-base {
+      font-family: 'Space Grotesk', 'Fira Code', 'Courier New', monospace;
+      font-size: 90px;
+      font-weight: 900;
+      letter-spacing: 15px;
+      text-anchor: middle;
+      dominant-baseline: middle;
+    }
+
+    /* Auto-adapts to GitHub Light vs Dark themes */
+    @media (prefers-color-scheme: light) {
+      .text-main { fill: #0f172a; }             /* Dark text in Light mode */
+      .glow      { filter: drop-shadow(0 0 20px rgba(59, 130, 246, 0.4)); }
+    }
+    @media (prefers-color-scheme: dark) {
+      .text-main { fill: #f8fafc; }             /* Light text in Dark mode */
+      .glow      { filter: drop-shadow(0 0 20px rgba(0, 229, 255, 0.6)); }
+    }
+
+    /* Glitch Layers Styling */
+    .glitch-1 {
+      fill: #FF003C;
+      animation: glitch-anim-1 3.5s infinite linear alternate-reverse;
+      opacity: 0.85;
+      clip-path: url(#glitch-clip-1);
+    }
+    .glitch-2 {
+      fill: #00E5FF;
+      animation: glitch-anim-2 2.5s infinite linear alternate-reverse;
+      opacity: 0.85;
+      clip-path: url(#glitch-clip-2);
+    }
+
+    /* Keyframe Animations for Glitch Slices */
+    @keyframes glitch-anim-1 {
+      0%   { transform: translate(-5px, 2px); }
+      10%  { transform: translate(5px, -2px); }
+      20%  { transform: translate(-5px, -2px); }
+      30%  { transform: translate(5px, 2px); }
+      40%  { transform: translate(-3px, 1px); }
+      50%  { transform: translate(0, 0); } /* Silent phase */
+      100% { transform: translate(0, 0); }
+    }
+    
+    @keyframes glitch-anim-2 {
+      0%   { transform: translate(5px, -2px); }
+      10%  { transform: translate(-5px, 2px); }
+      20%  { transform: translate(5px, 2px); }
+      30%  { transform: translate(-5px, -2px); }
+      40%  { transform: translate(3px, -1px); }
+      50%  { transform: translate(0, 0); } /* Silent phase */
+      100% { transform: translate(0, 0); }
+    }
+
+    /* Laser Scanner Line */
+    .scanner {
+      fill: url(#cyberGradient);
+      opacity: 0.8;
+      animation: scan 4s ease-in-out infinite;
+    }
+    
+    @keyframes scan {
+      0%   { transform: translateY(-30px); opacity: 0; }
+      10%  { opacity: 1; }
+      90%  { opacity: 1; }
+      100% { transform: translateY(180px); opacity: 0; }
+    }
+  </style>
+
+  <!-- Background Layer -->
+  <rect class="bg" width="800" height="160" />
+
+  <!-- Base Text inside a group for glowing effect -->
+  <g class="glow">
+    <!-- Main Static Text Layer -->
+    <text x="51%" y="55%" class="text-base text-main">MANTIS</text>
+  </g>
+
+  <!-- Glitch Displaced Text Layers (Red & Cyan) -->
+  <text x="51%" y="55%" class="text-base glitch-1">MANTIS</text>
+  <text x="51%" y="55%" class="text-base glitch-2">MANTIS</text>
+
+  <!-- Very faint Gradient Overlay for extra Cyber vibe -->
+  <text x="51%" y="55%" class="text-base" fill="url(#cyberGradient)" opacity="0.35">MANTIS</text>
+
+  <!-- Scanning Laser Line simulating a threat analysis sweep -->
+  <rect x="150" y="0" width="500" height="4" class="scanner" rx="2" />
+</svg>

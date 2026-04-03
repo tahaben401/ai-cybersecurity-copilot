@@ -7,11 +7,11 @@
 </p>
 
 <h1 align="center">
-   MANTIS
+  <img src="./assets/mantis-logo.svg" alt="MANTIS" width="600" />
 </h1>
 
 <h3 align="center">
-  <strong>M</strong>ulti-<strong>A</strong>gent <strong>N</strong>eural <strong>T</strong>hreat <strong>I</strong>ntelligence <strong>S</strong>ystem
+  <img src="https://readme-typing-svg.demolab.com?font=Space+Grotesk&weight=600&size=20&pause=1000&color=3B82F6&center=true&vCenter=true&width=800&height=40&lines=Multi-Agent+Neural+Threat+Intelligence+System;AI-powered+vulnerability+scanner;Understands,+explains,+and+fixes+flaws" alt="Typing Subtitle" />
 </h3>
 
 <p align="center">
