@@ -106,10 +106,33 @@ public class SarifParser {
     }
 
     private String mapSeverity(String sarifLevel, SarifRule rule) {
-        if (rule != null && rule.getImpact() != null) {
-            String normalized = rule.getImpact().toUpperCase().trim();
-            if (isValidSeverity(normalized)) return normalized;
+        // 1. Check Semgrep "impact" property
+        if (rule != null && rule.getProperties() != null) {
+            Object impact = rule.getProperties().get("impact");
+            if (impact != null && isValidSeverity(impact.toString().toUpperCase().trim())) {
+                return impact.toString().toUpperCase().trim();
+            }
+
+            // 2. Check Trivy explicit "severity" property
+            Object trivySeverity = rule.getProperties().get("severity");
+            if (trivySeverity != null && isValidSeverity(trivySeverity.toString().toUpperCase().trim())) {
+                return trivySeverity.toString().toUpperCase().trim();
+            }
+
+            // 3. Check CodeQL CVSS "security-severity" property (e.g., "9.8" -> CRITICAL)
+            Object cvssScoreObj = rule.getProperties().get("security-severity");
+            if (cvssScoreObj != null) {
+                try {
+                    double cvss = Double.parseDouble(cvssScoreObj.toString());
+                    if (cvss >= 9.0) return "CRITICAL";
+                    if (cvss >= 7.0) return "HIGH";
+                    if (cvss >= 4.0) return "MEDIUM";
+                    if (cvss > 0.0) return "LOW";
+                } catch (NumberFormatException ignored) {}
+            }
         }
+
+        // 4. Fallback to OASIS SARIF standard "level"
         if (sarifLevel == null) return "INFO";
         return switch (sarifLevel.toLowerCase()) {
             case "error"   -> "HIGH";
@@ -141,12 +164,31 @@ public class SarifParser {
                 .collect(Collectors.toMap(SarifRule::getId, r -> r, (a, b) -> a));
     }
 
+    /**
+     * Extracts CWE ID using multiple fallback strategies (Semgrep tags, Trivy ID, CodeQL descriptions)
+     */
     private String extractCweId(SarifRule rule) {
         if (rule == null) return null;
+
+        // Strategy 1: Check Tags (Semgrep / CodeQL normal behavior)
         for (String tag : rule.getTags()) {
             Matcher m = CWE_PATTERN.matcher(tag);
             if (m.find()) return "CWE-" + m.group(1);
         }
+
+        // Strategy 2: Check Rule ID directly (Trivy often outputs "CWE-XXX" directly)
+        if (rule.getId() != null) {
+            Matcher m = CWE_PATTERN.matcher(rule.getId());
+            if (m.find()) return "CWE-" + m.group(1);
+        }
+
+        // Strategy 3: Dig into descriptions if Tags are missing
+        String helpText = extractRuleDescription(rule);
+        if (helpText != null) {
+            Matcher m = CWE_PATTERN.matcher(helpText);
+            if (m.find()) return "CWE-" + m.group(1);
+        }
+
         return null;
     }
 
