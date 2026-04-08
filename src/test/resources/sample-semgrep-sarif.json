@@ -1,0 +1,227 @@
+{
+  "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "tool": {
+        "driver": {
+          "name": "Semgrep",
+          "semanticVersion": "1.75.0",
+          "rules": [
+            {
+              "id": "java.lang.security.audit.sqli.jdbc-sqli",
+              "name": "jdbc-sqli",
+              "shortDescription": {
+                "text": "SQL Injection via JDBC"
+              },
+              "fullDescription": {
+                "text": "Detected a formatted string in a SQL statement. This could lead to SQL injection if variables in the SQL statement are not properly sanitized."
+              },
+              "help": {
+                "text": "Use parameterized queries (PreparedStatement) instead of string concatenation to prevent SQL injection vulnerabilities.",
+                "markdown": "Use **parameterized queries** (`PreparedStatement`) instead of string concatenation."
+              },
+              "properties": {
+                "precision": "very-high",
+                "tags": [
+                  "CWE-89",
+                  "A03:2021",
+                  "security",
+                  "owasp-top-ten"
+                ],
+                "impact": "HIGH"
+              }
+            },
+            {
+              "id": "java.lang.security.audit.xss.no-direct-response-writer",
+              "name": "no-direct-response-writer",
+              "shortDescription": {
+                "text": "Potential XSS via response writer"
+              },
+              "fullDescription": {
+                "text": "Writing user input directly to the HTTP response can lead to cross-site scripting (XSS) attacks."
+              },
+              "help": {
+                "text": "Escape or sanitize all user input before writing to the response."
+              },
+              "properties": {
+                "precision": "high",
+                "tags": [
+                  "CWE-79",
+                  "A03:2021",
+                  "security"
+                ],
+                "impact": "MEDIUM"
+              }
+            },
+            {
+              "id": "generic.secrets.security.detected-generic-api-key",
+              "name": "detected-generic-api-key",
+              "shortDescription": {
+                "text": "Hardcoded API key detected"
+              },
+              "fullDescription": {
+                "text": "A hardcoded API key was detected in the source code. This is a security risk."
+              },
+              "help": {
+                "text": "Move secrets to environment variables or a secrets manager."
+              },
+              "properties": {
+                "precision": "medium",
+                "tags": [
+                  "CWE-798",
+                  "security",
+                  "secrets"
+                ],
+                "impact": "CRITICAL"
+              }
+            },
+            {
+              "id": "python.lang.maintainability.useless-ifelse",
+              "name": "useless-ifelse",
+              "shortDescription": {
+                "text": "Useless if-else"
+              },
+              "properties": {
+                "tags": [
+                  "maintainability"
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "results": [
+        {
+          "ruleId": "java.lang.security.audit.sqli.jdbc-sqli",
+          "level": "error",
+          "message": {
+            "text": "Detected SQL query built with string concatenation. Use parameterized queries instead."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/example/UserDao.java"
+                },
+                "region": {
+                  "startLine": 42,
+                  "startColumn": 9,
+                  "endLine": 42,
+                  "endColumn": 78,
+                  "snippet": {
+                    "text": "String query = \"SELECT * FROM users WHERE id = \" + userId;"
+                  }
+                }
+              }
+            }
+          ],
+          "properties": {
+            "fingerprint": "abc123def456"
+          },
+          "fixes": [
+            {
+              "description": {
+                "text": "Use PreparedStatement with parameter binding"
+              },
+              "artifactChanges": [
+                {
+                  "artifactLocation": {
+                    "uri": "src/main/java/com/example/UserDao.java"
+                  },
+                  "replacements": [
+                    {
+                      "deletedRegion": {
+                        "startLine": 42,
+                        "startColumn": 9,
+                        "endLine": 42,
+                        "endColumn": 78
+                      },
+                      "insertedContent": {
+                        "text": "PreparedStatement ps = conn.prepareStatement(\"SELECT * FROM users WHERE id = ?\"); ps.setString(1, userId);"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "ruleId": "java.lang.security.audit.xss.no-direct-response-writer",
+          "level": "warning",
+          "message": {
+            "text": "User-controlled data written directly to HTTP response without sanitization."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/java/com/example/SearchServlet.java"
+                },
+                "region": {
+                  "startLine": 15,
+                  "startColumn": 5,
+                  "endLine": 15,
+                  "endColumn": 52,
+                  "snippet": {
+                    "text": "response.getWriter().println(request.getParameter(\"q\"));"
+                  }
+                }
+              }
+            }
+          ],
+          "properties": {
+            "fingerprint": "xyz789ghi012"
+          }
+        },
+        {
+          "ruleId": "generic.secrets.security.detected-generic-api-key",
+          "level": "error",
+          "message": {
+            "text": "Found hardcoded API key: 'AKIAIOSFODNN7EXAMPLE'"
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/main/resources/config.properties"
+                },
+                "region": {
+                  "startLine": 3,
+                  "startColumn": 1,
+                  "endLine": 3,
+                  "endColumn": 45,
+                  "snippet": {
+                    "text": "aws.access-key=AKIAIOSFODNN7EXAMPLE"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "python.lang.maintainability.useless-ifelse",
+          "level": "note",
+          "message": {
+            "text": "This if-else block can be simplified."
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "scripts/utils.py"
+                },
+                "region": {
+                  "startLine": 88,
+                  "startColumn": 1,
+                  "endLine": 92
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
