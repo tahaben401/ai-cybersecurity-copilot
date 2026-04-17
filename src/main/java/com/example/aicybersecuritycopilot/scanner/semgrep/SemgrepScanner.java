@@ -179,6 +179,7 @@ public class SemgrepScanner implements SecurityScanner {
         }
     }
 
+
     private void cleanupTempFile(Path file) {
         try { Files.deleteIfExists(file); } catch (IOException ignored) {}
     }
