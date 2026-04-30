@@ -1,0 +1,59 @@
+{
+  "scan_id": "test-scan-001",
+  "project_id": "test-project-001",
+  "finding_rule_id": "java.lang.security.audit.sqli.tainted-sql-from-http-request",
+  "analysis": {
+    "rule_id": "java.lang.security.audit.sqli.tainted-sql-from-http-request",
+    "severity": "CRITICAL",
+    "explanation": "La méthode `findByUsername` construit une requête SQL en concaténant directement la valeur de la variable `username` dans la chaîne de requête. Cette variable provient d'une entrée utilisateur non fiable (requête HTTP). Sans aucune forme d'échappement ou de paramétrisation, un attaquant peut manipuler le contenu de `username` pour modifier la structure et la logique de la requête SQL exécutée, conduisant à une injection SQL.",
+    "impact": "Un attaquant peut potentiellement contourner les mécanismes d'authentification ou d'autorisation, accéder à des données sensibles de la base de données (informations sur les utilisateurs, mots de passe hashés, etc.), modifier ou supprimer des enregistrements arbitraires, et même exécuter des commandes sur le système d'exploitation sous-jacent si la base de données est configurée avec des privilèges élevés (par exemple, des fonctions utilisateur définies).",
+    "attack_scenario": "1. Un attaquant tente de s'authentifier sur l'application en utilisant le champ 'username'.\n2. Au lieu d'un nom d'utilisateur valide, l'attaquant injecte une chaîne comme `admin' OR '1'='1 --`.\n3. La requête SQL exécutée par la méthode `findByUsername` deviendrait `SELECT * FROM users WHERE username = 'admin' OR '1'='1 --'`. Les `--` commentent le reste de la requête originale, rendant la clause `WHERE` toujours vraie.\n4. La base de données retournerait alors le premier utilisateur rencontré (souvent 'admin'), permettant à l'attaquant de se connecter sans connaître le mot de passe, ou de récupérer des informations sur tous les utilisateurs.",
+    "cwe_id": "CWE-89",
+    "cvss_score": 9.8
+  },
+  "enrichment": {
+    "cve_ids": [
+      "CVE-2002-0999",
+      "CVE-2002-2252",
+      "CVE-2002-2277"
+    ],
+    "references": [
+      "http://archives.neohapsis.com/archives/bugtraq/2002-07/0128.html",
+      "http://www.care2x.com/modul.php?thispage=headlines&m_titel=NEWS&m_item=Headlines&lang=en",
+      "http://archives.neohapsis.com/archives/bugtraq/2002-12/0000.html",
+      "http://securitytracker.com/id?1005733",
+      "http://archives.neohapsis.com/archives/bugtraq/2002-11/0359.html",
+      "http://www.securityfocus.com/bid/6273"
+    ],
+    "known_exploits": false,
+    "similar_findings": [
+      "Consequences: Remote code execution (RCE) — the most severe impact. Attackers can execute arbitrary OS commands on the server. This is the vulnerability class behind Log4Shell (CVE-2021-44228) and num",
+      "CWE: CWE-119\nDescription: Improper Restriction of Operations within the Bounds of a Memory Buffer. The product performs operations on a memory buffer without sufficient boundary checks. In Java, the J",
+      "CWE: CWE-78\nDescription: Improper Neutralization of Special Elements used in an OS Command (OS Command Injection). The application constructs all or part of an OS command using externally-influenced i"
+    ],
+    "enrichment_context": "CVE CVE-2002-0999 (CVSS: 7.5): Multiple SQL injection vulnerabilities in CARE 2002 before beta 1.0.02 allow remote attackers to perform unauthorized database operations.\n\n---\n\nCVE CVE-2002-2252 (CVSS: 7.5): SQL injection vulnerability in auth.inc.php in Thatware 0.5.0 and earlier allows remote attackers to execute arbitrary SQL commands via a base64-encoded user parameter.\n\n---\n\nCVE CVE-2002-2277 (CVSS: 7.5): SQL injection vulnerability in mod_search/index.php in PortailPHP 0.99 allows remote attackers to execute arbitrary SQL commands via the (1) $rech, (2) $BD_Tab_docs, (3) $BD_Tab_file, (4) $BD_Tab_liens, (5) $BD_Tab_faq, or (6) $chemin variables.\n\n---\n\nConsequences: Remote code execution (RCE) — the most severe impact. Attackers can execute arbitrary OS commands on the server. This is the vulnerability class behind Log4Shell (CVE-2021-44228) and numerous Apache Commons Collections exploits.\n\n---\n\nCWE: CWE-119\nDescription: Improper Restriction of Operations within the Bounds of a Memory Buffer. The product performs operations on a memory buffer without sufficient boundary checks. In Java, the JVM prevents direct memory corruption, but this can occur in JNI/JNA native code, Unsafe class usage, or direct ByteBuffer operations.\nConsequences: Memory corruption in native code. Data leakage from adjacent memory regions. Application crashes or undefined behavior.\n\n---\n\nCWE: CWE-78\nDescription: Improper Neutralization of Special Elements used in an OS Command (OS Command Injection). The application constructs all or part of an OS command using externally-influenced input without properly neutralizing special elements that could modify the intended command. In Java/Spring Boot, this occurs when using Runtime.exec(), ProcessBuilder, or Apache Commons Exec with unsanitized user input.\n\n---\n\nFix Pattern (java):\nVulnerability: SQL Injection\nLanguage: java\nVulnerable Code Pattern:\nString query = \"SELECT * FROM users WHERE username = '\" + username + \"'\";\nStatement stmt = connection.createStatement();\nResultSet rs = stmt.executeQuery(query);\nSecure Code Pattern:\nString query = \"SELECT * FROM users WHERE username = ?\";\nPreparedStatement pstmt = connection.prepareStatement(query);\npstmt.setString(1, username);\n\n---\n\nFix Pattern (java):\nVulnerability: SQL Injection\nLanguage: python\nVulnerable Code Pattern:\nquery = f\"SELECT * FROM users WHERE username = '{username}'\"\ncursor.execute(query)\nSecure Code Pattern:\nquery = \"SELECT * FROM users WHERE username = %s\"\ncursor.execute(query, (username,))\n\n---\n\nOWASP Best Practice:\nOWASP Cheatsheet: SQL Injection Prevention\nCategory: A03:2021-Injection\n\nOWASP SQL Injection Prevention Cheatsheet for Spring Boot:\n\nDEFENSE #1 — PARAMETERIZED QUERIES (Primary):\n    // JPA/Hibernate\n    @Query(\"SELECT u FROM User u WHERE u.email = :email\")\n    User findByEmail(@Param(\"email\") String email);\n    \n    // JdbcTemplate\n    jdbcTemplate.query(\"SELECT * FROM users WHERE id = ?\", mapper, userId);\n    \n    // Native SQL via EntityManager\n    entityManager.createNativeQuery(\"SELECT * FROM users WHERE name = ?1\")\n                 .setParameter(1, name);\n\n---\n\nOWASP Best Practice:\nDEFENSE #2 — SPRING DATA JPA METHOD NAMES (Strongest):\n    // Spring Data generates safe queries automatically\n    User findByUsername(String username);\n    List<Order> findByStatusAndCreatedDateAfter(String status, LocalDate date);\n\nDEFENSE #3 — CRITERIA API (For Dynamic Queries):\n    CriteriaBuilder cb = entityManager.getCriteriaBuilder();\n    CriteriaQuery<User> query = cb.createQuery(User.class);\n    Root<User> root = query.from(User.class);\n    query.where(cb.equal(root.get(\"status\"), status));",
+    "enrichment_quality": "HIGH"
+  },
+  "patch": {
+    "file_path": "src/main/java/com/mantis/repository/UserRepository.java",
+    "original_code": "public User findByUsername(String username) {\n    String query = \"SELECT * FROM users WHERE username = '\" + username + \"'\";\n    return jdbcTemplate.queryForObject(query, new UserRowMapper());\n}",
+    "patched_code": "public User findByUsername(String username) {\n    String query = \"SELECT * FROM users WHERE username = ?\";\n    return jdbcTemplate.queryForObject(query, new UserRowMapper(), username);\n}",
+    "explanation": "La vulnérabilité d'injection SQL a été corrigée en utilisant une requête paramétrée fournie par `JdbcTemplate`. Initialement, la requête SQL était construite par concaténation directe de la variable `username` dans la chaîne de requête. Cela permettait à un attaquant de manipuler la requête SQL en injectant des caractères spéciaux ou des commandes SQL via l'entrée `username`, potentiellement pour contourner l'authentification, accéder à des données sensibles ou exécuter des commandes arbitraires sur la base de données (CWE-89).\n\nLe patch applique la meilleure pratique de sécurité OWASP pour la prévention des injections (OWASP A03:2021-Injection - \"Parameterized Queries\"). Au lieu de concaténer la variable, un placeholder (`?`) est utilisé dans la chaîne de requête. La valeur de `username` est ensuite passée comme argument séparé à la méthode `queryForObject`. Le `JdbcTemplate` (et le pilote JDBC sous-jacent) est alors responsable d'échapper correctement ou de traiter la valeur de `username` comme une donnée, plutôt que comme une partie du code SQL. Cela garantit que toute entrée malveillante dans `username` sera traitée comme une simple chaîne de caractères et non comme une instruction SQL exécutable, empêchant ainsi l'exploitation de l'injection SQL.",
+    "confidence": 0.99,
+    "is_meaningful_change": true,
+    "confidence_label": "HIGH"
+  },
+  "review": {
+    "approved": true,
+    "feedback": "Le patch corrige efficacement la vulnérabilité d'injection SQL (CWE-89) en remplaçant la concaténation directe de la variable `username` par une requête paramétrée via `JdbcTemplate`. Cette approche est conforme aux meilleures pratiques de sécurité OWASP A03:2021-Injection. Le code est syntaxiquement correct, ne modifie pas la logique métier attendue (recherche d'un utilisateur par nom), et n'introduit aucune nouvelle vulnérabilité. Les arguments sont correctement liés, garantissant que l'entrée utilisateur est traitée comme une donnée et non comme du code SQL exécutable.",
+    "security_check_passed": true,
+    "introduces_regression": false,
+    "status": "APPROVED"
+  },
+  "processing_time_ms": 23652,
+  "processed_at": "2026-04-30T00:33:01.964407+00:00",
+  "model_used": "gemini-2.5-flash",
+  "error": null,
+  "overall_status": "APPROVED",
+  "processing_time_seconds": 23.65
+}

@@ -1,0 +1,21 @@
+[project]
+name = "mantis-ai-service"
+version = "0.1.0"
+description = "MANTIS AI Service — Multi-Agent Neural Threat Intelligence System"
+requires-python = ">=3.12"
+authors = [
+    { name = "Ismail", email = "ismail@mantis.dev" },
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+log_cli = true
+log_cli_level = "INFO"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
