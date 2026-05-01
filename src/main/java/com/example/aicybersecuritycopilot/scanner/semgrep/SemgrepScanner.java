@@ -98,8 +98,6 @@ public class SemgrepScanner implements SecurityScanner {
         if (!properties.isMetricsEnabled()) {
             command.add("--metrics=off");
         }
-
-        command.add("--quiet");
         command.add(codeDirectory.toAbsolutePath().toString());
 
         return command;
@@ -108,6 +106,8 @@ public class SemgrepScanner implements SecurityScanner {
     private int executeProcess(List<String> command, Path workingDir) throws ScannerExecutionException {
         try {
             ProcessBuilder pb = new ProcessBuilder(command);
+            pb.environment().put("PYTHONUTF8", "1");
+            pb.environment().put("PYTHONIOENCODING", "utf-8");
             pb.directory(workingDir.toFile());
             pb.redirectErrorStream(true);
 
