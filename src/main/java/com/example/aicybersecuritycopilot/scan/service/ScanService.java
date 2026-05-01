@@ -5,6 +5,12 @@ import com.example.aicybersecuritycopilot.project.repository.ProjectRepository;
 import com.example.aicybersecuritycopilot.scan.entity.Scan;
 import com.example.aicybersecuritycopilot.scan.entity.ScanStatus;
 import com.example.aicybersecuritycopilot.scan.repository.ScanRepository;
+import com.example.aicybersecuritycopilot.scanner.ScannerExecutionException;
+import com.example.aicybersecuritycopilot.scanner.ScannerResult;
+import com.example.aicybersecuritycopilot.scanner.SecurityScanner;
+import com.example.aicybersecuritycopilot.scanner.codeql.CodeqlScanner;
+import com.example.aicybersecuritycopilot.scanner.semgrep.SemgrepScanner;
+import com.example.aicybersecuritycopilot.scanner.trivy.TrivyScanner;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -13,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
@@ -25,6 +32,9 @@ public class ScanService {
     private final ProjectRepository projectRepository;
     private final RepoValidator repoValidator;
     private final RepoCloner repoCloner;
+    private final SemgrepScanner semgrepScanner;
+    private final TrivyScanner trivyScanner;
+    private final CodeqlScanner codeqlScanner;
 
     /**
      * Sync method called by the Controller. Sets up the DB record and kicks off the Async task.
@@ -69,9 +79,22 @@ public class ScanService {
             Path clonedDir = repoCloner.cloneRepository(repoUrl, scanId);
             
             // 2. TODO: Run CompletableFuture.allOf() for Semgrep, CodeQL, and Trivy
-            log.info("Simulating Scanning Engines running in parallel...");
-            Thread.sleep(3000); 
-            
+            CompletableFuture<ScannerResult> semgrepFuture = runScannerAsync(semgrepScanner, clonedDir);
+            CompletableFuture<ScannerResult> trivyFuture   = runScannerAsync(trivyScanner,   clonedDir);
+            CompletableFuture<ScannerResult> codeQLFuture  = runScannerAsync(codeqlScanner,  clonedDir);
+            // waiting all of them to finish
+            CompletableFuture.allOf(semgrepFuture, trivyFuture, codeQLFuture).join();
+            // log.info("Simulating Scanning Engines running in parallel...");
+
+            //Thread.sleep(3000);
+            List<ScannerResult> results = List.of(
+                    semgrepFuture.getNow(failedResult(semgrepScanner.getToolName())),
+                    trivyFuture.getNow(failedResult(trivyScanner.getToolName())),
+                    codeQLFuture.getNow(failedResult(codeqlScanner.getToolName()))
+            );
+
+            results.forEach(r -> log.info("[{}] findings: {}, success: {}, time: {}ms",
+                    r.getToolName(), r.getFindingsCount(), r.isSuccess(), r.getExecutionTimeMs()));
             // 3. Mark complete
             scan.setStatus(ScanStatus.COMPLETED);
             scan.setFinishedAt(LocalDateTime.now());
@@ -93,5 +116,28 @@ public class ScanService {
             repoCloner.cleanupRepository(scanId);
             return CompletableFuture.failedFuture(e);
         }
+    }
+    private CompletableFuture<ScannerResult> runScannerAsync(SecurityScanner scanner, Path repoPath) {
+        return CompletableFuture.supplyAsync(() -> {
+            if (!scanner.isAvailable()) {
+                log.warn("[{}] Scanner not available, skipping.", scanner.getToolName());
+                return failedResult(scanner.getToolName());
+            }
+            try {
+                return scanner.scan(repoPath);
+            } catch (ScannerExecutionException e) {
+                log.error("[{}] Scanner threw exception: {}", scanner.getToolName(), e.getMessage());
+                return failedResult(scanner.getToolName());
+            }
+        });
+    }
+
+    private ScannerResult failedResult(String toolName) {
+        return ScannerResult.builder()
+                .toolName(toolName)
+                .success(false)
+                .findingsCount(0)
+                .errorMessage("Scanner unavailable or failed")
+                .build();
     }
 }

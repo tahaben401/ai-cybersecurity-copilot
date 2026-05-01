@@ -15,8 +15,8 @@ import java.util.UUID;
 @Slf4j
 public class RepoCloner {
 
-    
-    private static final String TEMP_CLONE_DIR = System.getProperty("java.io.tmpdir") + File.separator + "mantis_scans";
+
+    private static final String TEMP_CLONE_DIR = System.getProperty("user.dir") + File.separator + "mantis-scans";
 
     /**
      * Clones a repository to a temporary directory for scanning.
@@ -55,14 +55,21 @@ public class RepoCloner {
             throw new IOException("Git clone process was interrupted", e);
         }
     }
-    
-   
+
+
     public void cleanupRepository(UUID scanId) {
         Path targetDir = Paths.get(TEMP_CLONE_DIR, scanId.toString());
         try {
             if (Files.exists(targetDir)) {
+                // Windows fix: git sets .git/objects files as read-only,
+                // so we must make them writable before deletion
+                Files.walk(targetDir)
+                        .forEach(path -> path.toFile().setWritable(true));
+
                 FileSystemUtils.deleteRecursively(targetDir);
                 log.info("Cleaned up directory {}", targetDir.toAbsolutePath());
+            } else {
+                log.warn("Cleanup called but directory does not exist: {}", targetDir.toAbsolutePath());
             }
         } catch (IOException e) {
             log.warn("Failed to clean up directory {}: {}", targetDir.toAbsolutePath(), e.getMessage());
