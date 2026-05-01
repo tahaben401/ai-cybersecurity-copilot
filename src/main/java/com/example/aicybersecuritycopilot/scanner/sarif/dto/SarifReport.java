@@ -117,7 +117,7 @@ public class SarifReport {
     @Getter @Setter @NoArgsConstructor @AllArgsConstructor
     public static class SarifArtifactLocation {
         private String uri;
-        private int uriBaseId;
+        private String uriBaseId;
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
