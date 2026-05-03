@@ -49,7 +49,7 @@ public class CodeqlScanner implements SecurityScanner {
         log.info("[CodeQL] Downloading required query packs: {}", packs);
         try {
             List<String> cmd = new ArrayList<>();
-            cmd.add("codeql");
+            cmd.addAll(getOsCommand("codeql"));
             cmd.add("pack");
             cmd.add("download");
             cmd.addAll(packs);
@@ -149,7 +149,9 @@ public class CodeqlScanner implements SecurityScanner {
     @Override
     public boolean isAvailable() {
         try {
-            Process process = new ProcessBuilder("codeql", "version")
+            List<String> command = new ArrayList<>(getOsCommand("codeql"));
+            command.add("version");
+            Process process = new ProcessBuilder(command)
                     .redirectErrorStream(true).start();
             drainAsync(process);
             return process.waitFor(10, TimeUnit.SECONDS) && process.exitValue() == 0;
@@ -164,8 +166,9 @@ public class CodeqlScanner implements SecurityScanner {
     // -------------------------------------------------------------------------
 
     private void buildDatabase(Path codeDirectory, Path dbDir, String language) {
-        List<String> cmd = new ArrayList<>(List.of(
-                "codeql", "database", "create", dbDir.toAbsolutePath().toString(),
+        List<String> cmd = new ArrayList<>();
+        cmd.addAll(getOsCommand("codeql"));
+        cmd.addAll(List.of("database", "create", dbDir.toAbsolutePath().toString(),
                 "--language=" + language,
                 "--source-root=" + codeDirectory.toAbsolutePath(),
                 "--overwrite",
@@ -188,8 +191,9 @@ public class CodeqlScanner implements SecurityScanner {
     // -------------------------------------------------------------------------
 
     private int analyzeDatabase(Path dbDir, Path sarifOutput, String language) {
-        List<String> cmd = new ArrayList<>(List.of(
-                "codeql", "database", "analyze", dbDir.toAbsolutePath().toString(),
+        List<String> cmd = new ArrayList<>();
+        cmd.addAll(getOsCommand("codeql"));
+        cmd.addAll(List.of("database", "analyze", dbDir.toAbsolutePath().toString(),
                 "--format=sarif-latest",
                 "--output=" + sarifOutput.toAbsolutePath(),
                 "--no-print-diagnostics-summary"
@@ -250,14 +254,22 @@ public class CodeqlScanner implements SecurityScanner {
     // -------------------------------------------------------------------------
 
     private String resolveLanguage(Path codeDirectory) {
-        if (!properties.getLanguages().isEmpty())
-            return properties.getLanguages().get(0);
+        List<String> configured = properties.getLanguages();
+        if (configured != null && configured.size() == 1) {
+            String lang = configured.get(0);
+            if (lang != null && !lang.isBlank() && !"auto".equalsIgnoreCase(lang)) {
+                return lang.trim();
+            }
+        }
 
         try (var s = Files.walk(codeDirectory, 3)) {
             if (s.anyMatch(p -> p.toString().endsWith(".java"))) return "java";
         } catch (IOException ignored) {}
         try (var s = Files.walk(codeDirectory, 3)) {
-            if (s.anyMatch(p -> p.toString().endsWith(".js") || p.toString().endsWith(".ts"))) return "javascript";
+            if (s.anyMatch(p -> p.toString().endsWith(".js")
+                    || p.toString().endsWith(".ts")
+                    || p.toString().endsWith(".jsx")
+                    || p.toString().endsWith(".tsx"))) return "javascript";
         } catch (IOException ignored) {}
         try (var s = Files.walk(codeDirectory, 3)) {
             if (s.anyMatch(p -> p.toString().endsWith(".py"))) return "python";
@@ -284,5 +296,12 @@ public class CodeqlScanner implements SecurityScanner {
         } catch (IOException e) {
             log.warn("[{}] Failed to delete temp DB directory: {}", TOOL_NAME, dir);
         }
+    }
+
+    private List<String> getOsCommand(String baseCommand) {
+        if (System.getProperty("os.name").toLowerCase().contains("win")) {
+            return List.of("cmd.exe", "/c", baseCommand);
+        }
+        return List.of(baseCommand);
     }
 }

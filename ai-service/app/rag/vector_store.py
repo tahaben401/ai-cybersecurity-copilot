@@ -23,7 +23,7 @@ Pourquoi PAS de Re-ranking ?
     - Nos documents sont bien structurés → la pertinence initiale suffit
     - bge-base-en-v1.5 est déjà un modèle de retrieval optimisé
     - Le LLM agent fait son propre "re-ranking" en analysant le contexte
-
+cad beacoup de temp et pas l'appele de tout ca 
 Architecture:
     Query
     ├── ChromaDB (Semantic) → Top K résultats par similarité vectorielle

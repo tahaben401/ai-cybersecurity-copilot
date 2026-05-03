@@ -131,16 +131,16 @@ async def reviewer_node(state: MantisState) -> dict:
 
     except json.JSONDecodeError as e:
         logger.error("reviewer_json_parse_failed", rule_id=rule_id, error=str(e))
-        # En cas d'erreur, on approuve par défaut (on ne veut pas bloquer le pipeline)
+        # En cas d'erreur de parsing, on REJETTE par défaut pour éviter d'approuver un patch potentiellement dangereux.
         return {
             "review": {
-                "approved": True,
-                "feedback": "Review auto-approuvée (erreur de parsing). Vérification manuelle recommandée.",
-                "security_check_passed": True,
-                "introduces_regression": False,
+                "approved": False,
+                "feedback": "Erreur interne de parsing JSON lors de la review. Le patch a été rejeté par précaution.",
+                "security_check_passed": False,
+                "introduces_regression": True,
             },
             "current_agent": "done",
-            "messages": [f"[Reviewer] ⚠️ Auto-approuvé (parsing error) pour {rule_id}"],
+            "messages": [f"[Reviewer] ⚠️ Rejet par défaut (parsing error) pour {rule_id}"],
         }
 
     except Exception as e:

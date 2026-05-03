@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -130,7 +131,9 @@ public class TrivyScanner implements SecurityScanner {
     public boolean isAvailable() {
         Process process = null;
         try {
-            process = new ProcessBuilder("trivy", "--version").start();
+            List<String> command = new ArrayList<>(getOsCommand("trivy"));
+            command.add("--version");
+            process = new ProcessBuilder(command).start();
             drainAsync(process);
             return process.waitFor(5, TimeUnit.SECONDS) && process.exitValue() == 0;
         } catch (Exception e) {
@@ -141,10 +144,11 @@ public class TrivyScanner implements SecurityScanner {
     }
 
     private List<String> buildCommand(Path codeDirectory, Path sarifOutputFile) {
-        return List.of(
-                "trivy", "fs", "--format", "sarif", "--output", sarifOutputFile.toString(),
-                "--exit-code", "1", "--severity", "HIGH,CRITICAL", codeDirectory.toString()
-        );
+        List<String> command = new ArrayList<>();
+        command.addAll(getOsCommand("trivy"));
+        command.addAll(List.of("fs", "--format", "sarif", "--output", sarifOutputFile.toString(),
+                "--exit-code", "1", "--severity", "HIGH,CRITICAL", codeDirectory.toString()));
+        return command;
     }
 
     private CompletableFuture<String> drainAsync(Process process) {
@@ -177,4 +181,11 @@ public class TrivyScanner implements SecurityScanner {
 
     @Override
     public String getToolName() { return TOOL_NAME; }
+
+    private List<String> getOsCommand(String baseCommand) {
+        if (System.getProperty("os.name").toLowerCase().contains("win")) {
+            return List.of("cmd.exe", "/c", baseCommand);
+        }
+        return List.of(baseCommand);
+    }
 }

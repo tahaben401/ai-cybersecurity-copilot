@@ -107,6 +107,10 @@ class EnrichmentData(BaseModel):
         default_factory=list,
         description="IDs des CVEs associés trouvés dans NVD (ex: CVE-2024-12345)",
     )
+    ghsa_ids: list[str] = Field(
+        default_factory=list,
+        description="IDs des GHSA associés trouvés dans GitHub Advisory",
+    )
     references: list[str] = Field(
         default_factory=list,
         description="URLs de référence (advisories, documentation, PoC)",

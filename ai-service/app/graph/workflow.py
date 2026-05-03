@@ -215,6 +215,7 @@ def _build_result(
     enrichment_data = state.get("enrichment") or {}
     enrichment = EnrichmentData(
         cve_ids=enrichment_data.get("cve_ids", []),
+        ghsa_ids=enrichment_data.get("ghsa_ids", []),
         references=enrichment_data.get("references", []),
         known_exploits=enrichment_data.get("known_exploits", False),
         similar_findings=enrichment_data.get("similar_findings", []),

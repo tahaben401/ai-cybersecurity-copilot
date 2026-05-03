@@ -14,6 +14,8 @@ import com.example.aicybersecuritycopilot.scanner.sarif.FindingDTO;
 import com.example.aicybersecuritycopilot.scanner.sarif.SarifParser;
 import com.example.aicybersecuritycopilot.scanner.semgrep.SemgrepScanner;
 import com.example.aicybersecuritycopilot.scanner.trivy.TrivyScanner;
+import com.example.aicybersecuritycopilot.broker.service.ScanResultPublisher;
+import com.example.aicybersecuritycopilot.broker.dto.ScanResultMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -42,6 +44,8 @@ public class ScanService {
     private final CodeqlScanner codeqlScanner;
     private final SarifParser sarifParser;
     private final FindingService findingService;
+    private final ScanResultPublisher scanResultPublisher;
+
     /**
      * Sync method called by the Controller. Sets up the DB record and kicks off the Async task.
      */
@@ -122,6 +126,15 @@ public class ScanService {
             scan.setFinishedAt(LocalDateTime.now());
             findingService.saveFindings(scanId, findings);
             scanRepository.save(scan);
+            
+            // Send to RabbitMQ for AI Service
+            ScanResultMessage message = ScanResultMessage.builder()
+                    .scanId(scanId)
+                    .projectId(scan.getProject().getId())
+                    .branch(scan.getBranch())
+                    .findings(findings)
+                    .build();
+            scanResultPublisher.publishScanResults(message);
             
             // 4. Cleanup to save space
             repoCloner.cleanupRepository(scanId);

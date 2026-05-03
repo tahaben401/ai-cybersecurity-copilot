@@ -59,6 +59,28 @@ class Settings(BaseSettings):
         default="ai.results",
         description="Queue de sortie — On y publie les résultats AI"
     )
+    BROKER_ENABLE_CONSUMER: bool = Field(
+        default=True,
+        description="Démarrer le consumer RabbitMQ au lancement de l'API"
+    )
+    BROKER_PREFETCH: int = Field(
+        default=4,
+        ge=1,
+        le=1000,
+        description="Nombre max de messages en vol par consumer"
+    )
+    BROKER_MAX_CONCURRENCY: int = Field(
+        default=3,
+        ge=1,
+        le=1000,
+        description="Nombre max de findings traités en parallèle"
+    )
+
+    # ── API Security ───────────────────────────────────────────────
+    API_KEY: str = Field(
+        default="",
+        description="Clé API pour protéger les routes admin"
+    )
 
     # ── Redis (Semantic Cache) ───────────────────────────────────────
     REDIS_URL: str = Field(
@@ -98,6 +120,25 @@ class Settings(BaseSettings):
     )
     NVD_BASE_URL: str = Field(
         default="https://services.nvd.nist.gov/rest/json/cves/2.0"
+    )
+
+    # ── GitHub Advisory API ──────────────────────────────────────────
+    GITHUB_API_TOKEN: str = Field(
+        default="",
+        description="Token GitHub (optionnel, augmente le rate limit)"
+    )
+    GITHUB_API_BASE_URL: str = Field(
+        default="https://api.github.com",
+        description="Base URL GitHub API"
+    )
+    GITHUB_API_VERSION: str = Field(
+        default="2022-11-28",
+        description="Version GitHub API"
+    )
+    GITHUB_API_TIMEOUT: float = Field(
+        default=20.0,
+        gt=0,
+        description="Timeout GitHub API (secondes)"
     )
 
     # ── Application ──────────────────────────────────────────────────

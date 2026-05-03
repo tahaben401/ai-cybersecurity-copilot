@@ -8,7 +8,7 @@ les meilleures informations possibles.
 """
 import json
 from app.graph.state import MantisState
-from app.tools.nvd_client import nvd_client
+from app.tools.wrapper import security_enrichment_wrapper
 from app.rag.vector_store import vector_store
 from app.cache.semantic_cache import semantic_cache
 from app.core.logger import logger
@@ -76,6 +76,7 @@ async def enricher_node(state: MantisState) -> dict:
 
     enrichment = {
         "cve_ids": [],
+        "ghsa_ids": [],
         "references": [],
         "known_exploits": False,
         "similar_findings": [],
@@ -85,28 +86,25 @@ async def enricher_node(state: MantisState) -> dict:
 
     context_parts = []
 
-    # ── 2. Recherche NVD (CVEs réels) ────────────────────────────
+    # ── 2. Recherche Externe (NVD + GitHub Advisory via Wrapper) ─
     try:
         if cwe_id:
-            nvd_results = await nvd_client.search_by_cwe(cwe_id, max_results=3)
+            wrapper_res = await security_enrichment_wrapper.enrich_cwe(cwe_id, max_results_per_source=3)
 
-            for cve in nvd_results:
-                if cve.get("cve_id"):
-                    enrichment["cve_ids"].append(cve["cve_id"])
+            enrichment["cve_ids"].extend(wrapper_res.get("cve_ids", []))
+            enrichment["ghsa_ids"].extend(wrapper_res.get("ghsa_ids", []))
+            enrichment["references"].extend(wrapper_res.get("references", []))
 
-                refs = cve.get("references", [])
-                enrichment["references"].extend(refs[:2])
+            # Ajouter le contexte externe fusionné
+            context_parts.extend(wrapper_res.get("context_parts", []))
 
-                desc = cve.get("description", "")
-                if desc:
-                    context_parts.append(
-                        f"CVE {cve['cve_id']} (CVSS: {cve.get('cvss_score', 'N/A')}): "
-                        f"{desc[:300]}"
-                    )
-
-            logger.info("enricher_nvd_done", cve_count=len(enrichment["cve_ids"]))
+            logger.info(
+                "enricher_external_api_done",
+                cve_count=len(enrichment["cve_ids"]),
+                ghsa_count=len(enrichment["ghsa_ids"])
+            )
     except Exception as e:
-        logger.warning("enricher_nvd_failed", error=str(e))
+        logger.warning("enricher_external_api_failed", error=str(e))
 
     # ── 3. Recherche RAG (ChromaDB Hybrid Search) ────────────────
     try:

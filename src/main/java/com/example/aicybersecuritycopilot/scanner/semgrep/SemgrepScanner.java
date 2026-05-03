@@ -58,7 +58,9 @@ public class SemgrepScanner implements SecurityScanner {
     @Override
     public boolean isAvailable() {
         try {
-            ProcessBuilder pb = new ProcessBuilder("semgrep", "--version");
+            List<String> command = new ArrayList<>(getOsCommand("semgrep"));
+            command.add("--version");
+            ProcessBuilder pb = new ProcessBuilder(command);
             pb.redirectErrorStream(true);
             Process process = pb.start();
             boolean finished = process.waitFor(10, TimeUnit.SECONDS);
@@ -75,8 +77,11 @@ public class SemgrepScanner implements SecurityScanner {
 
     private List<String> buildCommand(Path codeDirectory, Path sarifOutputFile) {
         List<String> command = new ArrayList<>();
-        command.add("semgrep");
+        command.addAll(getOsCommand("semgrep"));
         command.add("scan");
+
+        boolean usesAutoRuleset = properties.getRulesets().stream()
+                .anyMatch(ruleset -> "auto".equalsIgnoreCase(ruleset));
 
         for (String ruleset : properties.getRulesets()) {
             command.add("--config");
@@ -96,7 +101,11 @@ public class SemgrepScanner implements SecurityScanner {
         command.add(String.valueOf(properties.getMaxFileSizeBytes()));
 
         if (!properties.isMetricsEnabled()) {
-            command.add("--metrics=off");
+            if (usesAutoRuleset) {
+                log.warn("[{}] Semgrep auto ruleset requires metrics; enabling metrics for this scan", TOOL_NAME);
+            } else {
+                command.add("--metrics=off");
+            }
         }
         command.add(codeDirectory.toAbsolutePath().toString());
 
@@ -219,5 +228,12 @@ public class SemgrepScanner implements SecurityScanner {
     private String truncate(String text) {
         if (text == null) return "";
         return text.length() > 2000 ? text.substring(0, 2000) + "\n... [TRUNCATED]" : text;
+    }
+
+    private List<String> getOsCommand(String baseCommand) {
+        if (System.getProperty("os.name").toLowerCase().contains("win")) {
+            return List.of("cmd.exe", "/c", baseCommand);
+        }
+        return List.of(baseCommand);
     }
 }
