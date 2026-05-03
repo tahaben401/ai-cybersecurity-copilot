@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 import aio_pika
@@ -66,5 +67,10 @@ class BrokerConsumer:
 		except Exception as e:
 			logger.error("scan_processing_failed", scan_id=scan_msg.scan_id, error=str(e))
 			await message.nack(requeue=True)
+			
+		# OPTIMISATION POUR LE FREE TIER GEMINI
+		# Pause de 20 secondes avant de traiter la faille suivante pour éviter le 429 RESOURCE_EXHAUSTED
+		logger.info("free_tier_cooldown", seconds=20, detail="Pause pour respecter le quota API Gemini")
+		await asyncio.sleep(20)
 
 consumer = BrokerConsumer()
