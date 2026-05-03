@@ -7,7 +7,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -96,8 +98,6 @@ public class SemgrepScanner implements SecurityScanner {
         if (!properties.isMetricsEnabled()) {
             command.add("--metrics=off");
         }
-
-        command.add("--quiet");
         command.add(codeDirectory.toAbsolutePath().toString());
 
         return command;
@@ -106,24 +106,45 @@ public class SemgrepScanner implements SecurityScanner {
     private int executeProcess(List<String> command, Path workingDir) throws ScannerExecutionException {
         try {
             ProcessBuilder pb = new ProcessBuilder(command);
+            pb.environment().put("PYTHONUTF8", "1");
+            pb.environment().put("PYTHONIOENCODING", "utf-8");
             pb.directory(workingDir.toFile());
             pb.redirectErrorStream(true);
 
             Process process = pb.start();
-            String processOutput = drainProcessOutput(process);
+
+            // Drain output in separate thread to prevent buffer deadlock on Windows
+            StringBuilder outputBuffer = new StringBuilder();
+            Thread outputDrainer = new Thread(() -> {
+                try (BufferedReader reader = new BufferedReader(
+                        new InputStreamReader(process.getInputStream()))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) {
+                        outputBuffer.append(line).append("\n");
+                    }
+                } catch (IOException ignored) {}
+            });
+            outputDrainer.start();
+
             boolean finished = process.waitFor(properties.getTimeoutSeconds(), TimeUnit.SECONDS);
 
             if (!finished) {
                 process.destroyForcibly();
-                throw new ScannerExecutionException(TOOL_NAME, "Scan timed out");
+                throw new ScannerExecutionException(TOOL_NAME, "Scan timed out after "
+                        + properties.getTimeoutSeconds() + "s");
             }
 
+            outputDrainer.join(5000); // wait up to 5s for output to finish draining
+            String processOutput = outputBuffer.toString();
             int exitCode = process.exitValue();
+
             if (exitCode >= 2) {
-                log.error("[{}] Process failed with exit code {}. Output:\n{}", TOOL_NAME, exitCode, truncate(processOutput));
+                log.error("[{}] Process failed with exit code {}. Output:\n{}",
+                        TOOL_NAME, exitCode, truncate(processOutput));
             }
 
             return exitCode;
+
         } catch (IOException e) {
             throw new ScannerExecutionException(TOOL_NAME, "Failed to start process", e);
         } catch (InterruptedException e) {
@@ -178,6 +199,7 @@ public class SemgrepScanner implements SecurityScanner {
             throw new ScannerExecutionException(TOOL_NAME, "Failed to read SARIF", e);
         }
     }
+
 
     private void cleanupTempFile(Path file) {
         try { Files.deleteIfExists(file); } catch (IOException ignored) {}

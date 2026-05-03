@@ -38,7 +38,37 @@ public class CodeqlScanner implements SecurityScanner {
         if (properties.isEnabled() && !isAvailable())
             log.warn("[{}] CLI not found on PATH – scanner will be disabled at runtime", TOOL_NAME);
     }
+    @PostConstruct
+    public void downloadQueryPacks() {
+        List<String> packs = List.of(
+                "codeql/java-queries",
+                "codeql/javascript-queries",
+                "codeql/python-queries"
+        );
 
+        log.info("[CodeQL] Downloading required query packs: {}", packs);
+        try {
+            List<String> cmd = new ArrayList<>();
+            cmd.add("codeql");
+            cmd.add("pack");
+            cmd.add("download");
+            cmd.addAll(packs);
+
+            ProcessBuilder pb = new ProcessBuilder(cmd);
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+            String output = new String(process.getInputStream().readAllBytes());
+            int exitCode = process.waitFor();
+
+            if (exitCode == 0) {
+                log.info("[CodeQL] All query packs ready.");
+            } else {
+                log.warn("[CodeQL] Pack download exited with code {}. Output:\n{}", exitCode, output);
+            }
+        } catch (Exception e) {
+            log.warn("[CodeQL] Could not download query packs: {}", e.getMessage());
+        }
+    }
 
 
 
@@ -138,11 +168,12 @@ public class CodeqlScanner implements SecurityScanner {
                 "codeql", "database", "create", dbDir.toAbsolutePath().toString(),
                 "--language=" + language,
                 "--source-root=" + codeDirectory.toAbsolutePath(),
-                "--overwrite"
+                "--overwrite",
+                "--build-mode=none"   // ← add this
         ));
         if (properties.getThreads() > 0) cmd.add("--threads=" + properties.getThreads());
         if (properties.getRamMb()   > 0) cmd.add("--ram="     + properties.getRamMb());
-        properties.getExcludedDirs().forEach(e -> cmd.add("--exclude=" + e));
+        //properties.getExcludedDirs().forEach(e -> cmd.add("--exclude=" + e));
 
         log.info("[{}] Building database for language '{}'", TOOL_NAME, language);
         int exitCode = executeProcess(cmd, codeDirectory, "database create");
@@ -163,14 +194,19 @@ public class CodeqlScanner implements SecurityScanner {
                 "--output=" + sarifOutput.toAbsolutePath(),
                 "--no-print-diagnostics-summary"
         ));
-        properties.getQuerySuites().forEach(suite -> cmd.add(language + "-" + suite + ".qls"));
+
+        // ✅ Correct pack reference format
+        properties.getQuerySuites().forEach(suite ->
+                cmd.add("codeql/" + language + "-queries:codeql-suites/" + language + "-" + suite + ".qls")
+        );
+
         if (properties.getThreads() > 0) cmd.add("--threads=" + properties.getThreads());
         if (properties.getRamMb()   > 0) cmd.add("--ram="     + properties.getRamMb());
 
         log.info("[{}] Running analysis -> {}", TOOL_NAME, sarifOutput);
+        log.info("[{}] Full analyze command: {}", TOOL_NAME, String.join(" ", cmd)); // keep this for debugging
         return executeProcess(cmd, dbDir, "database analyze");
     }
-
     // -------------------------------------------------------------------------
     // Process execution
     // -------------------------------------------------------------------------
