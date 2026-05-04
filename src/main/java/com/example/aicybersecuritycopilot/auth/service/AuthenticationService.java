@@ -36,7 +36,10 @@ public class AuthenticationService {
                 )
         );
         final User user = (User) auth.getPrincipal();
-        final String accessToken = this.jwtService.generateToken(user);
+        java.util.Map<String, Object> extraClaims = new java.util.HashMap<>();
+        extraClaims.put("userId", user.getId().toString());
+        extraClaims.put("id", user.getId().toString());
+        final String accessToken = this.jwtService.generateToken(extraClaims, user);
 
         return AuthenticationResponse.builder()
                 .accessToken(accessToken)
