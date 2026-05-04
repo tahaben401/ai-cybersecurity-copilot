@@ -21,6 +21,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.nio.file.Path;
 import java.time.LocalDateTime;
@@ -29,6 +30,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 @Service
 @RequiredArgsConstructor
@@ -45,7 +48,7 @@ public class ScanService {
     private final SarifParser sarifParser;
     private final FindingService findingService;
     private final ScanResultPublisher scanResultPublisher;
-
+    private final Map<UUID, List<SseEmitter>> emitters = new ConcurrentHashMap<>();
     /**
      * Sync method called by the Controller. Sets up the DB record and kicks off the Async task.
      */
@@ -79,16 +82,18 @@ public class ScanService {
     @Async
     public CompletableFuture<Void> performAsyncScan(UUID scanId, String repoUrl) {
         log.info("Starting async scan for scanId: {}", scanId);
-        
+
         Scan scan = scanRepository.findById(scanId).orElseThrow();
         scan.setStatus(ScanStatus.IN_PROGRESS);
         scanRepository.save(scan);
-        
+
         try {
             // 1. Clone Repo
+            sendUpdate(scanId, Map.of("status", "CLONING", "message", "Cloning repository..."));
             Path clonedDir = repoCloner.cloneRepository(repoUrl, scanId);
-            
+
             // 2. TODO: Run CompletableFuture.allOf() for Semgrep, CodeQL, and Trivy
+            sendUpdate(scanId, Map.of("status", "SCANNING", "message", "Running security engines..."));
             CompletableFuture<ScannerResult> semgrepFuture = runScannerAsync(semgrepScanner, clonedDir);
             CompletableFuture<ScannerResult> trivyFuture   = runScannerAsync(trivyScanner,   clonedDir);
             CompletableFuture<ScannerResult> codeQLFuture  = runScannerAsync(codeqlScanner,  clonedDir);
@@ -126,7 +131,7 @@ public class ScanService {
             scan.setFinishedAt(LocalDateTime.now());
             findingService.saveFindings(scanId, findings);
             scanRepository.save(scan);
-            
+
             // Send to RabbitMQ for AI Service
             ScanResultMessage message = ScanResultMessage.builder()
                     .scanId(scanId)
@@ -135,21 +140,32 @@ public class ScanService {
                     .findings(findings)
                     .build();
             scanResultPublisher.publishScanResults(message);
-            
+
             // 4. Cleanup to save space
             repoCloner.cleanupRepository(scanId);
-            
+
             log.info("Async scan completed successfully for scanId: {}", scanId);
+            sendUpdate(scanId, Map.of("status", "COMPLETED", "scanId", scanId));
+            // Close all emitters for this scan
+            List<SseEmitter> scanEmitters = emitters.remove(scanId);
+            if (scanEmitters != null) {
+                scanEmitters.forEach(SseEmitter::complete);
+            }
             return CompletableFuture.completedFuture(null);
-            
+
         } catch (Exception e) {
             log.error("Scan failed for scanId: {}", scanId, e);
             scan.setStatus(ScanStatus.FAILED);
             scan.setFinishedAt(LocalDateTime.now());
             scanRepository.save(scan);
-            
+            sendUpdate(scanId, Map.of("status", "FAILED", "error", e.getMessage()));
             // Always cleanup on fail!
             repoCloner.cleanupRepository(scanId);
+            // Close all emitters for this scan
+            List<SseEmitter> scanEmitters = emitters.remove(scanId);
+            if (scanEmitters != null) {
+                scanEmitters.forEach(SseEmitter::complete);
+            }
             return CompletableFuture.failedFuture(e);
         }
     }
@@ -166,6 +182,41 @@ public class ScanService {
                 return failedResult(scanner.getToolName());
             }
         });
+    }
+    public SseEmitter subscribeToScan(UUID scanId) {
+        // 5-minute timeout for the stream
+        SseEmitter emitter = new SseEmitter(300_000L);
+
+        this.emitters.computeIfAbsent(scanId, k -> new CopyOnWriteArrayList<>()).add(emitter);
+
+        emitter.onCompletion(() -> removeEmitter(scanId, emitter));
+        emitter.onTimeout(() -> removeEmitter(scanId, emitter));
+        emitter.onError((e) -> removeEmitter(scanId, emitter));
+
+        return emitter;
+    }
+
+    private void removeEmitter(UUID scanId, SseEmitter emitter) {
+        List<SseEmitter> scanEmitters = emitters.get(scanId);
+        if (scanEmitters != null) {
+            scanEmitters.remove(emitter);
+            if (scanEmitters.isEmpty()) emitters.remove(scanId);
+        }
+    }
+
+    private void sendUpdate(UUID scanId, Object data) {
+        List<SseEmitter> scanEmitters = emitters.get(scanId);
+        if (scanEmitters != null) {
+            for (SseEmitter emitter : scanEmitters) {
+                try {
+                    emitter.send(SseEmitter.event()
+                            .name("scan-update")
+                            .data(data));
+                } catch (Exception e) {
+                    removeEmitter(scanId, emitter);
+                }
+            }
+        }
     }
 
     private ScannerResult failedResult(String toolName) {

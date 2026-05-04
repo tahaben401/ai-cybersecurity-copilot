@@ -5,8 +5,12 @@ import com.example.aicybersecuritycopilot.scan.dto.ScanResponse;
 import com.example.aicybersecuritycopilot.scan.entity.Scan;
 import com.example.aicybersecuritycopilot.scan.service.ScanService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/scans")
@@ -33,4 +37,9 @@ public class ScanController {
         // HTTP 202 Accepted indicates the request is accepted for processing, but not yet completed.
         return ResponseEntity.accepted().body(response);
     }
+    @GetMapping(value = "/{scanId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter streamScan(@PathVariable UUID scanId) {
+        return scanService.subscribeToScan(scanId);
+    }
+
 }
