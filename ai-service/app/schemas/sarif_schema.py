@@ -190,16 +190,28 @@ class Finding(BaseModel):
 
     @field_validator("severity", mode="before")
     @classmethod
-    def normalize_severity(cls, v: str) -> str:
+    def normalize_severity(cls, v) -> str:
         """
         Normalise la sévérité pour gérer les alias des différents scanners.
 
         Semgrep utilise ERROR/WARNING/INFO
         CodeQL utilise error/warning/note
+        Trivy peut renvoyer UNKNOWN
         SARIF standard utilise CRITICAL/HIGH/MEDIUM/LOW/INFO
+
+        Robustesse: une sévérité absente (None) ou vide ne doit JAMAIS
+        faire échouer l'analyse — on retombe sur MEDIUM, comme pour tout
+        alias inconnu. Sinon un seul finding mal renseigné fait planter
+        toute la requête /analyze (422).
         """
+        if v is None:
+            return SeverityLevel.MEDIUM.value
+        if isinstance(v, SeverityLevel):
+            return v.value
         if isinstance(v, str):
-            # Convertir via notre enum intelligent
+            if not v.strip():
+                return SeverityLevel.MEDIUM.value
+            # Convertir via notre enum intelligent (fallback MEDIUM)
             return SeverityLevel.from_string(v).value
         return v
 

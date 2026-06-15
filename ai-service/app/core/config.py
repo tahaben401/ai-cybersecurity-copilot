@@ -27,8 +27,12 @@ class Settings(BaseSettings):
 
     # ── LLM — Google Gemini ──────────────────────────────────────────
     GOOGLE_API_KEY: str = Field(
-        ...,
+        default="",
         description="Clé API Google AI Studio pour Gemini"
+    )
+    GEMINI_API_KEY: str = Field(
+        default="",
+        description="Nom alternatif accepté par le SDK Google; utilisé si GOOGLE_API_KEY est vide"
     )
     LLM_MODEL_NAME: str = Field(
         default="gemini-2.5-flash",
@@ -44,6 +48,21 @@ class Settings(BaseSettings):
         default=8192,
         gt=0,
         description="Nombre maximum de tokens en sortie"
+    )
+    LLM_REQUESTS_PER_SECOND: float = Field(
+        default=0.15,
+        gt=0,
+        description=(
+            "Débit max d'appels Gemini par seconde, tous agents confondus. "
+            "Free tier ≈ 10 req/min → 0.15 (9/min, avec marge). "
+            "Monte cette valeur (ex: 1.5) si tu passes en tier payant."
+        )
+    )
+    LLM_MAX_RETRIES: int = Field(
+        default=5,
+        ge=0,
+        le=10,
+        description="Retries automatiques sur erreur transitoire / 429 RESOURCE_EXHAUSTED"
     )
 
     # ── RabbitMQ ─────────────────────────────────────────────────────
@@ -156,6 +175,15 @@ class Settings(BaseSettings):
         le=5,
         description="Nombre max de retries Coder→Reviewer avant abandon"
     )
+
+    @property
+    def google_api_key(self) -> str:
+        """
+        Clé Gemini effective. Accepte GOOGLE_API_KEY ou GEMINI_API_KEY,
+        et nettoie les espaces / guillemets parasites collés dans le .env.
+        """
+        raw = self.GOOGLE_API_KEY or self.GEMINI_API_KEY or ""
+        return raw.strip().strip('"').strip("'").strip()
 
     @property
     def rabbitmq_url(self) -> str:

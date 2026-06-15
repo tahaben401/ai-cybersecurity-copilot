@@ -5,6 +5,8 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -40,6 +42,12 @@ public class Scan {
 
     @Column
     private LocalDateTime finishedAt;
+
+    /** Per-scanner outcomes (success, findings, duration, error) for this scan. */
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "scan_scanner_runs", joinColumns = @JoinColumn(name = "scan_id"))
+    @Builder.Default
+    private List<ScannerRun> scannerRuns = new ArrayList<>();
 
     @PrePersist
     protected void onCreate() {

@@ -58,7 +58,9 @@ public class SemgrepScanner implements SecurityScanner {
     @Override
     public boolean isAvailable() {
         try {
-            List<String> command = new ArrayList<>(getOsCommand("semgrep"));
+            List<String> command = properties.isUseDocker()
+                    ? new ArrayList<>(getOsCommand("docker"))
+                    : new ArrayList<>(getOsCommand("semgrep"));
             command.add("--version");
             ProcessBuilder pb = new ProcessBuilder(command);
             pb.redirectErrorStream(true);
@@ -76,10 +78,46 @@ public class SemgrepScanner implements SecurityScanner {
     }
 
     private List<String> buildCommand(Path codeDirectory, Path sarifOutputFile) {
+        return properties.isUseDocker()
+                ? buildDockerCommand(codeDirectory, sarifOutputFile)
+                : buildLocalCommand(codeDirectory, sarifOutputFile);
+    }
+
+    private List<String> buildLocalCommand(Path codeDirectory, Path sarifOutputFile) {
         List<String> command = new ArrayList<>();
         command.addAll(getOsCommand("semgrep"));
         command.add("scan");
+        appendSemgrepArgs(command,
+                codeDirectory.toAbsolutePath().toString(),
+                sarifOutputFile.toAbsolutePath().toString());
+        return command;
+    }
 
+    /**
+     * Runs Semgrep inside the official container. The cloned repo is mounted
+     * read-only at /src and the host temp dir (parent of the SARIF file) is
+     * mounted at /out so the report can be read back on the host.
+     */
+    private List<String> buildDockerCommand(Path codeDirectory, Path sarifOutputFile) {
+        Path outDir = sarifOutputFile.toAbsolutePath().getParent();
+        String sarifFileName = sarifOutputFile.getFileName().toString();
+
+        List<String> command = new ArrayList<>(getOsCommand("docker"));
+        command.add("run");
+        command.add("--rm");
+        command.add("-v");
+        command.add(codeDirectory.toAbsolutePath() + ":/src:ro");
+        command.add("-v");
+        command.add(outDir + ":/out");
+        command.add(properties.getDockerImage());
+        command.add("semgrep");
+        command.add("scan");
+        appendSemgrepArgs(command, "/src", "/out/" + sarifFileName);
+        return command;
+    }
+
+    /** Shared ruleset / output / exclusion flags for both local and Docker invocations. */
+    private void appendSemgrepArgs(List<String> command, String targetPath, String outputPath) {
         boolean usesAutoRuleset = properties.getRulesets().stream()
                 .anyMatch(ruleset -> "auto".equalsIgnoreCase(ruleset));
 
@@ -90,7 +128,7 @@ public class SemgrepScanner implements SecurityScanner {
 
         command.add("--sarif");
         command.add("--output");
-        command.add(sarifOutputFile.toAbsolutePath().toString());
+        command.add(outputPath);
 
         for (String excludedDir : properties.getExcludedDirs()) {
             command.add("--exclude");
@@ -107,9 +145,7 @@ public class SemgrepScanner implements SecurityScanner {
                 command.add("--metrics=off");
             }
         }
-        command.add(codeDirectory.toAbsolutePath().toString());
-
-        return command;
+        command.add(targetPath);
     }
 
     private int executeProcess(List<String> command, Path workingDir) throws ScannerExecutionException {

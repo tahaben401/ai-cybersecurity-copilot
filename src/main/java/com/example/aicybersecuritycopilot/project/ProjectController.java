@@ -4,6 +4,8 @@ package com.example.aicybersecuritycopilot.project;
 import com.example.aicybersecuritycopilot.project.dto.CreateProjectRequest;
 import com.example.aicybersecuritycopilot.project.model.Project;
 import com.example.aicybersecuritycopilot.project.service.ProjectService;
+import com.example.aicybersecuritycopilot.scan.dto.ScanSummaryResponse;
+import com.example.aicybersecuritycopilot.scan.service.ScanQueryService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +19,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class ProjectController {
     private final ProjectService projectService;
+    private final ScanQueryService scanQueryService;
     @GetMapping("/{id}")
     public ResponseEntity<Project> findProjectById(@PathVariable UUID id) {
         return ResponseEntity.ok(projectService.findProjectById(id));
@@ -34,5 +37,10 @@ public class ProjectController {
     public ResponseEntity<List<Project>> getProjectsByUser(@PathVariable UUID userId) {
         List<Project> projects = projectService.findUserProjects(userId);
         return ResponseEntity.ok(projects);
+    }
+
+    @GetMapping("/{projectId}/scans")
+    public ResponseEntity<List<ScanSummaryResponse>> getProjectScans(@PathVariable UUID projectId) {
+        return ResponseEntity.ok(scanQueryService.getProjectScans(projectId));
     }
 }

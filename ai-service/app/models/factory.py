@@ -27,9 +27,22 @@ Usage:
 from functools import lru_cache
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.language_models import BaseChatModel
+from langchain_core.rate_limiters import InMemoryRateLimiter
 
 from app.core.config import settings
 from app.core.logger import logger
+
+
+# ── Limiteur de débit PARTAGÉ ────────────────────────────────────────
+# Une seule instance partagée par TOUS les LLM (Analyst, Coder, Reviewer).
+# Il plafonne le débit global d'appels Gemini quelle que soit la concurrence
+# du batch — c'est ce qui rend le free tier (≈10 req/min) viable sans
+# toucher au graphe, au consumer ni aux agents.
+_rate_limiter = InMemoryRateLimiter(
+    requests_per_second=settings.LLM_REQUESTS_PER_SECOND,
+    check_every_n_seconds=0.5,
+    max_bucket_size=1,  # pas de rafale : appels strictement espacés
+)
 
 
 def create_llm(
@@ -65,6 +78,14 @@ def create_llm(
     temp = temperature if temperature is not None else settings.LLM_TEMPERATURE
     tokens = max_tokens or settings.LLM_MAX_TOKENS
 
+    api_key = settings.google_api_key
+    if not api_key:
+        raise ValueError(
+            "Clé Gemini manquante. Renseigne GOOGLE_API_KEY (ou GEMINI_API_KEY) "
+            "dans ai-service/.env. Génère-la gratuitement sur "
+            "https://aistudio.google.com/apikey"
+        )
+
     logger.info(
         "llm_instance_created",
         model=model,
@@ -79,8 +100,10 @@ def create_llm(
         max_output_tokens=tokens,
         top_p=top_p,
         top_k=top_k,
-        google_api_key=settings.GOOGLE_API_KEY,
+        google_api_key=api_key,
         convert_system_message_to_human=False,
+        rate_limiter=_rate_limiter,
+        max_retries=settings.LLM_MAX_RETRIES,
     )
 
 

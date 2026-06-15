@@ -7,6 +7,7 @@ import com.example.aicybersecuritycopilot.scanner.SecurityScanner;
 import jakarta.annotation.PostConstruct;
 import jakarta.json.Json;
 import jakarta.json.JsonArray;
+import jakarta.json.JsonArrayBuilder;
 import jakarta.json.JsonReader;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -79,68 +80,78 @@ public class CodeqlScanner implements SecurityScanner {
         if (codeDirectory == null || !Files.isDirectory(codeDirectory))
             throw new ScannerExecutionException(TOOL_NAME, "Invalid directory");
 
-        String uniqueId = UUID.randomUUID().toString().substring(0, 8);
-        Path base = properties.getDatabaseDir() != null && !properties.getDatabaseDir().isBlank()
-                ? Paths.get(properties.getDatabaseDir())
-                : Path.of(System.getProperty("java.io.tmpdir"));
-
-        Path dbDir;
-        Path sarifOutput;
-        try {
-            dbDir       = Files.createDirectories(base.resolve("mantis-codeql-db-" + uniqueId));
-            sarifOutput = Files.createTempFile("mantis-codeql-", ".sarif");
-        } catch (IOException e) {
-            throw new ScannerExecutionException(TOOL_NAME, "Cannot create temp files", e);
+        List<String> languages = resolveLanguages(codeDirectory);
+        if (languages.isEmpty()) {
+            log.warn("[{}] No supported language detected – nothing to scan", TOOL_NAME);
+            return ScannerResult.builder()
+                    .toolName(TOOL_NAME).success(true)
+                    .sarifContent("{}").findingsCount(0).executionTimeMs(0)
+                    .build();
         }
 
-        log.info("[{}] Starting scan on: {}", TOOL_NAME, codeDirectory);
+        log.info("[{}] Starting scan on {} – languages: {}", TOOL_NAME, codeDirectory, languages);
         long start = System.currentTimeMillis();
 
-        try {
-            String language = resolveLanguage(codeDirectory);
-            buildDatabase(codeDirectory, dbDir, language);
+        // Analyse each detected language in its own database, then merge the SARIF
+        // documents (the parser already supports multiple runs per report).
+        List<String> sarifReports = new ArrayList<>();
+        int totalFindings = 0;
 
-            int exitCode = analyzeDatabase(dbDir, sarifOutput, language);
-            long elapsed = System.currentTimeMillis() - start;
+        for (String language : languages) {
+            String uniqueId = UUID.randomUUID().toString().substring(0, 8);
+            Path base = properties.getDatabaseDir() != null && !properties.getDatabaseDir().isBlank()
+                    ? Paths.get(properties.getDatabaseDir())
+                    : Path.of(System.getProperty("java.io.tmpdir"));
 
-            if (exitCode != 0) {
-                return ScannerResult.builder()
-                        .toolName(TOOL_NAME).exitCode(exitCode)
-                        .executionTimeMs(elapsed).success(false)
-                        .errorMessage("CodeQL exited with error code: " + exitCode)
-                        .build();
+            Path dbDir;
+            Path sarifOutput;
+            try {
+                dbDir       = Files.createDirectories(base.resolve("mantis-codeql-db-" + language + "-" + uniqueId));
+                sarifOutput = Files.createTempFile("mantis-codeql-" + language + "-", ".sarif");
+            } catch (IOException e) {
+                throw new ScannerExecutionException(TOOL_NAME, "Cannot create temp files", e);
             }
 
-            String sarif = Files.exists(sarifOutput) && Files.size(sarifOutput) > 0
-                    ? Files.readString(sarifOutput) : "{}";
-
-            int findingsCount = 0;
-            try (JsonReader reader = Json.createReader(new StringReader(sarif))) {
-                JsonArray results = reader.readObject()
-                        .getJsonArray("runs").getJsonObject(0)
-                        .getJsonArray("results");
-                findingsCount = results != null ? results.size() : 0;
+            try {
+                buildDatabase(codeDirectory, dbDir, language);
+                int exitCode = analyzeDatabase(dbDir, sarifOutput, language);
+                if (exitCode != 0) {
+                    log.warn("[{}] '{}' analysis exited with code {} – skipping language", TOOL_NAME, language, exitCode);
+                    continue;
+                }
+                if (Files.exists(sarifOutput) && Files.size(sarifOutput) > 0) {
+                    String sarif = Files.readString(sarifOutput);
+                    sarifReports.add(sarif);
+                    totalFindings += countResults(sarif);
+                }
+            } catch (ScannerExecutionException e) {
+                log.warn("[{}] '{}' failed: {} – continuing with other languages", TOOL_NAME, language, e.getMessage());
             } catch (Exception e) {
-                log.warn("[{}] Could not parse SARIF to count findings, defaulting to 0", TOOL_NAME);
+                log.error("[{}] '{}' unexpected error", TOOL_NAME, language, e);
+            } finally {
+                try { Files.deleteIfExists(sarifOutput); } catch (IOException ignored) {}
+                cleanupDirectory(dbDir);
             }
-
-            log.info("[{}] Scan complete in {}ms – {} finding(s)", TOOL_NAME, elapsed, findingsCount);
-
-            return ScannerResult.builder()
-                    .toolName(TOOL_NAME).exitCode(exitCode)
-                    .sarifContent(sarif).executionTimeMs(elapsed)
-                    .success(true).findingsCount(findingsCount)
-                    .build();
-
-        } catch (ScannerExecutionException e) {
-            throw e;
-        } catch (Exception e) {
-            log.error("[{}] Unexpected error after {}ms", TOOL_NAME, System.currentTimeMillis() - start, e);
-            throw new ScannerExecutionException(TOOL_NAME, "Unexpected scan failure", e);
-        } finally {
-            try { Files.deleteIfExists(sarifOutput); } catch (IOException ignored) {}
-            cleanupDirectory(dbDir);
         }
+
+        long elapsed = System.currentTimeMillis() - start;
+
+        if (sarifReports.isEmpty()) {
+            return ScannerResult.builder()
+                    .toolName(TOOL_NAME).executionTimeMs(elapsed).success(false)
+                    .errorMessage("CodeQL produced no results for languages: " + languages)
+                    .build();
+        }
+
+        String merged = mergeSarifReports(sarifReports);
+        log.info("[{}] Scan complete in {}ms – {} finding(s) across {} language(s)",
+                TOOL_NAME, elapsed, totalFindings, sarifReports.size());
+
+        return ScannerResult.builder()
+                .toolName(TOOL_NAME).exitCode(0)
+                .sarifContent(merged).executionTimeMs(elapsed)
+                .success(true).findingsCount(totalFindings)
+                .build();
     }
 
     @Override
@@ -171,9 +182,11 @@ public class CodeqlScanner implements SecurityScanner {
         cmd.addAll(List.of("database", "create", dbDir.toAbsolutePath().toString(),
                 "--language=" + language,
                 "--source-root=" + codeDirectory.toAbsolutePath(),
-                "--overwrite",
-                "--build-mode=none"   // ← add this
+                "--overwrite"
         ));
+        // build-mode=none lets compiled languages (Java) be analysed without a build.
+        // Interpreted languages (JS/Python) are extracted directly and reject this flag.
+        if (needsBuildMode(language)) cmd.add("--build-mode=none");
         if (properties.getThreads() > 0) cmd.add("--threads=" + properties.getThreads());
         if (properties.getRamMb()   > 0) cmd.add("--ram="     + properties.getRamMb());
         //properties.getExcludedDirs().forEach(e -> cmd.add("--exclude=" + e));
@@ -253,30 +266,89 @@ public class CodeqlScanner implements SecurityScanner {
     // Helpers
     // -------------------------------------------------------------------------
 
-    private String resolveLanguage(Path codeDirectory) {
+    /**
+     * Returns every configured language that actually has source files present.
+     * Configuring a single language pins to it; "auto"/empty falls back to scanning
+     * for java, javascript and python. CodeQL needs one database per language.
+     */
+    private List<String> resolveLanguages(Path codeDirectory) {
         List<String> configured = properties.getLanguages();
-        if (configured != null && configured.size() == 1) {
-            String lang = configured.get(0);
-            if (lang != null && !lang.isBlank() && !"auto".equalsIgnoreCase(lang)) {
-                return lang.trim();
-            }
+        List<String> candidates;
+        if (configured == null || configured.isEmpty()
+                || configured.stream().anyMatch(l -> "auto".equalsIgnoreCase(l))) {
+            candidates = List.of("java", "javascript", "python");
+        } else {
+            candidates = configured.stream().map(String::trim).filter(s -> !s.isBlank()).toList();
         }
 
-        try (var s = Files.walk(codeDirectory, 3)) {
-            if (s.anyMatch(p -> p.toString().endsWith(".java"))) return "java";
-        } catch (IOException ignored) {}
-        try (var s = Files.walk(codeDirectory, 3)) {
-            if (s.anyMatch(p -> p.toString().endsWith(".js")
-                    || p.toString().endsWith(".ts")
-                    || p.toString().endsWith(".jsx")
-                    || p.toString().endsWith(".tsx"))) return "javascript";
-        } catch (IOException ignored) {}
-        try (var s = Files.walk(codeDirectory, 3)) {
-            if (s.anyMatch(p -> p.toString().endsWith(".py"))) return "python";
-        } catch (IOException ignored) {}
+        List<String> present = new ArrayList<>();
+        for (String lang : candidates) {
+            if (hasFilesForLanguage(codeDirectory, lang)) present.add(lang);
+        }
+        return present;
+    }
 
-        log.warn("[{}] Could not detect language – defaulting to 'java'", TOOL_NAME);
-        return "java";
+    private boolean hasFilesForLanguage(Path dir, String language) {
+        List<String> exts = switch (language.toLowerCase()) {
+            case "java" -> List.of(".java");
+            case "javascript", "typescript" -> List.of(".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs");
+            case "python" -> List.of(".py");
+            default -> List.of();
+        };
+        if (exts.isEmpty()) return false;
+        try (var s = Files.walk(dir)) {
+            return s.anyMatch(p -> {
+                String n = p.toString().toLowerCase();
+                return exts.stream().anyMatch(n::endsWith);
+            });
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    /** Compiled languages need a build mode; interpreted ones are extracted directly. */
+    private boolean needsBuildMode(String language) {
+        return switch (language.toLowerCase()) {
+            case "java", "csharp", "cpp", "go", "kotlin", "swift" -> true;
+            default -> false;
+        };
+    }
+
+    /** Counts results across all runs of a single SARIF report. */
+    private int countResults(String sarif) {
+        int count = 0;
+        try (JsonReader reader = Json.createReader(new StringReader(sarif))) {
+            JsonArray runs = reader.readObject().getJsonArray("runs");
+            if (runs != null) {
+                for (int i = 0; i < runs.size(); i++) {
+                    JsonArray results = runs.getJsonObject(i).getJsonArray("results");
+                    if (results != null) count += results.size();
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[{}] Could not count SARIF results", TOOL_NAME);
+        }
+        return count;
+    }
+
+    /** Merges per-language SARIF documents into one report (concatenates their runs). */
+    private String mergeSarifReports(List<String> reports) {
+        if (reports.size() == 1) return reports.get(0);
+        JsonArrayBuilder runs = Json.createArrayBuilder();
+        for (String report : reports) {
+            try (JsonReader reader = Json.createReader(new StringReader(report))) {
+                JsonArray rs = reader.readObject().getJsonArray("runs");
+                if (rs != null) rs.forEach(runs::add);
+            } catch (Exception e) {
+                log.warn("[{}] Skipping an unparseable SARIF report during merge: {}", TOOL_NAME, e.getMessage());
+            }
+        }
+        return Json.createObjectBuilder()
+                .add("version", "2.1.0")
+                .add("$schema", "https://json.schemastore.org/sarif-2.1.0.json")
+                .add("runs", runs)
+                .build()
+                .toString();
     }
 
     private CompletableFuture<String> drainAsync(Process process) {

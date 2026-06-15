@@ -5,6 +5,7 @@ import com.example.aicybersecuritycopilot.project.model.Project;
 import com.example.aicybersecuritycopilot.project.repository.ProjectRepository;
 import com.example.aicybersecuritycopilot.scan.entity.Scan;
 import com.example.aicybersecuritycopilot.scan.entity.ScanStatus;
+import com.example.aicybersecuritycopilot.scan.entity.ScannerRun;
 import com.example.aicybersecuritycopilot.scan.repository.ScanRepository;
 import com.example.aicybersecuritycopilot.scanner.ScannerExecutionException;
 import com.example.aicybersecuritycopilot.scanner.ScannerResult;
@@ -24,6 +25,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.file.Path;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -121,7 +123,14 @@ public class ScanService {
             log.info("[CodeQL]  success: {}, findings: {}, time: {}ms",
                     codeQLResult.isSuccess(), codeQLResult.getFindingsCount(), codeQLResult.getExecutionTimeMs());
 
-            // 3. Mark complete
+            // 3. Mark complete — record each scanner's outcome so the UI can show
+            // why a scanner produced no findings (failed / timed out) instead of
+            // silently dropping it.
+            scan.setScannerRuns(new ArrayList<>(List.of(
+                    toScannerRun(semgrepResult),
+                    toScannerRun(trivyResult),
+                    toScannerRun(codeQLResult)
+            )));
             scan.setStatus(ScanStatus.COMPLETED);
             scan.setFinishedAt(LocalDateTime.now());
             findingService.saveFindings(scanId, findings);
@@ -166,6 +175,22 @@ public class ScanService {
                 return failedResult(scanner.getToolName());
             }
         });
+    }
+
+    /** Maps a scanner's raw result into the persisted per-scanner summary. */
+    private ScannerRun toScannerRun(ScannerResult r) {
+        String error = null;
+        if (!r.isSuccess()) {
+            String msg = r.getErrorMessage() != null ? r.getErrorMessage() : "Scanner failed";
+            error = msg.length() > 600 ? msg.substring(0, 600) : msg;
+        }
+        return ScannerRun.builder()
+                .tool(r.getToolName())
+                .success(r.isSuccess())
+                .findings(r.getFindingsCount())
+                .durationMs(r.getExecutionTimeMs())
+                .error(error)
+                .build();
     }
 
     private ScannerResult failedResult(String toolName) {

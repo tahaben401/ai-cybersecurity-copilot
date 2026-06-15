@@ -16,6 +16,14 @@ public class SemgrepProperties {
     private boolean enabled = true;
     private int timeoutSeconds = 300;
 
+    /**
+     * Run Semgrep through Docker instead of the local CLI.
+     * The native Windows install is unreliable (opentelemetry / Python conflicts),
+     * so Docker is the supported path on Windows. Requires Docker Desktop running.
+     */
+    private boolean useDocker = true;
+    private String dockerImage = "semgrep/semgrep:latest";
+
     private List<String> rulesets = List.of(
             "auto",
             "p/owasp-top-ten",
