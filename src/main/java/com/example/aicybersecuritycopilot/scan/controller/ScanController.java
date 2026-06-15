@@ -7,8 +7,10 @@ import com.example.aicybersecuritycopilot.scan.entity.Scan;
 import com.example.aicybersecuritycopilot.scan.service.ScanQueryService;
 import com.example.aicybersecuritycopilot.scan.service.ScanService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
 import java.util.UUID;
@@ -50,5 +52,11 @@ public class ScanController {
     @GetMapping("/user/{userId}")
     public ResponseEntity<List<ScanSummaryResponse>> getUserScans(@PathVariable UUID userId) {
         return ResponseEntity.ok(scanQueryService.getUserScans(userId));
+    }
+
+    /** Server-Sent Events stream of live scan progress. */
+    @GetMapping(value = "/{scanId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter streamScan(@PathVariable UUID scanId) {
+        return scanService.subscribeToScan(scanId);
     }
 }

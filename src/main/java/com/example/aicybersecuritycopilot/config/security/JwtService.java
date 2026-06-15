@@ -1,11 +1,14 @@
 package com.example.aicybersecuritycopilot.config.security;
 
 
+import com.example.aicybersecuritycopilot.user.entity.User;
+import com.example.aicybersecuritycopilot.user.service.UserService;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
@@ -16,7 +19,9 @@ import java.util.Map;
 import java.util.function.Function;
 
 @Service
+@RequiredArgsConstructor
 public class JwtService {
+    private final UserService userService;
     private static final String SECRET_KEY = "aGhzMjU2LXNlY3JldC1rZXktZm9yLWhtYWMtc2lnbmluZy13aXRoLXNoYTI1Ng==";
 
     public String extractUsername(String token) {
@@ -42,7 +47,13 @@ public class JwtService {
     }
 
     public String generateToken(UserDetails userDetails) {
-        return generateToken(new HashMap<>(), userDetails);
+        Map<String, Object> extraClaims = new HashMap<>();
+
+        User user = (User) userDetails;
+        extraClaims.put("id", user.getId().toString());
+        extraClaims.put("role", user.getRole().name());
+
+        return generateToken(extraClaims, userDetails);
     }
 
     public boolean isTokenValid(String token, UserDetails userDetails) {
