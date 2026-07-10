@@ -3,6 +3,7 @@ package com.example.aicybersecuritycopilot.finding.repository;
 
 import com.example.aicybersecuritycopilot.finding.model.Finding;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -15,6 +16,11 @@ public interface FindingRepository extends JpaRepository<Finding, UUID> {
     List<Finding> findByScanIdOrderBySeverityAsc(UUID scanId);
 
     long countByScanId(UUID scanId);
+
+    /** Bulk-delete all findings belonging to the given scans (used when deleting a project). */
+    @Modifying
+    @Query("delete from Finding f where f.scan.id in :scanIds")
+    void deleteByScanIds(@Param("scanIds") Collection<UUID> scanIds);
 
     /**
      * Severity histogram for a single scan: rows of [severity, count].

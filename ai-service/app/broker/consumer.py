@@ -66,7 +66,12 @@ class BrokerConsumer:
 			await message.ack()
 		except Exception as e:
 			logger.error("scan_processing_failed", scan_id=scan_msg.scan_id, error=str(e))
-			await message.nack(requeue=True)
+			# On NE remet PAS le message en file (requeue=False).
+			# Sinon un message qui echoue (ex: quota LLM 429 epuise) serait rejoue
+			# en boucle et viderait le quota indefiniment. On le rejette (drop) ;
+			# il suffit de relancer le scan pour republier un message propre.
+			# Evolution possible : dead-letter queue pour conserver les echecs.
+			await message.reject(requeue=False)
 			
 		# OPTIMISATION POUR LE FREE TIER GEMINI
 		# Pause de 20 secondes avant de traiter la faille suivante pour éviter le 429 RESOURCE_EXHAUSTED
